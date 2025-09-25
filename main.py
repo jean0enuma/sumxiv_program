@@ -187,7 +187,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         prompt = CHAT_TEMPLATE + "\n\n本文抜粋:\n" + ch
         try:
             resp = client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
             )
@@ -206,7 +206,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
     reduce_prompt = CHAT_TEMPLATE + "\n\n以下のチャンク要約を重複を避けて統合せよ:\n" + "\n\n".join(partials)
     try:
         resp = client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
