@@ -12,7 +12,6 @@ from slack_sdk.errors import SlackApiError
 
 # 追加：表抽出用
 import pdfplumber
-import pandas as pd
 import time
 
 # ========= 環境変数 =========
@@ -125,48 +124,63 @@ def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[
                 finally:
                     pix = None
     return out
-def extract_tables_from_pdf_bytes(
+# ========= 表抽出（画像としてレンダリング） =========
+def extract_table_images_from_pdf_bytes(
     raw: bytes,
+    dpi: int = 200,
     max_tables: int = 8,
-    min_rows: int = 2,
-    min_cols: int = 2,
-    truncate_rows: int = 500
+    min_bbox_area: float = 20_000.0
 ) -> List[Tuple[str, bytes]]:
     """
-    PDFから表を抽出し、[(filename, csv_bytes), ...] を返す。
-    - pdfplumberのtable抽出はベクター線・文字配置から推定（埋め込み画像でもOKな場合あり）
-    - 大きすぎる表は行数をtruncate_rowsで切る（サイズ抑制）
+    pdfplumberで表のbboxを検出 → PyMuPDFでその領域を高解像度レンダリング → PNG化
+    戻り値: [(filename, png_bytes), ...]
     """
     results: List[Tuple[str, bytes]] = []
     try:
-        with pdfplumber.open(io.BytesIO(raw)) as pdf:
-            for pidx, page in enumerate(pdf.pages, start=1):
-                # lattice/stream 自動判定（pdfplumberはstream系）。必要に応じて table_settings の調整を
-                tables = page.extract_tables()
-                for tidx, t in enumerate(tables, start=1):
-                    if not t or not isinstance(t, list):
-                        continue
-                    # 行列サイズの簡易フィルタ
-                    n_rows = len(t)
-                    n_cols = max((len(row) for row in t if row is not None), default=0)
-                    if n_rows < min_rows or n_cols < min_cols:
-                        continue
+        # pdfplumber: テーブル検出用
+        pdfp = pdfplumber.open(io.BytesIO(raw))
+        # PyMuPDF: レンダリング用
+        doc = fitz.open(stream=raw, filetype="pdf")
 
-                    # pandasに通してCSV化（先頭行がヘッダかは不定なのでそのまま）
-                    df = pd.DataFrame(t)
-                    if truncate_rows and len(df) > truncate_rows:
-                        df = df.iloc[:truncate_rows].copy()
+        scale = dpi / 72.0
+        mat = fitz.Matrix(scale, scale)
 
-                    csv_bytes = df.to_csv(index=False).encode("utf-8")
-                    fname = f"table_p{pidx}_{tidx}.csv"
-                    results.append((fname, csv_bytes))
+        for pidx, page in enumerate(pdfp.pages, start=1):
+            try:
+                tbls = page.find_tables()  # Tableオブジェクトのリスト（bboxあり）
+            except Exception:
+                tbls = []
 
+            if not tbls:
+                continue
+
+            fitz_page = doc[pidx - 1]
+            for tidx, t in enumerate(tbls, start=1):
+                if not hasattr(t, "bbox") or t.bbox is None:
+                    continue
+                x0, top, x1, bottom = t.bbox
+                # bboxの面積でノイズ除去
+                if (x1 - x0) * (bottom - top) < min_bbox_area:
+                    continue
+
+                rect = fitz.Rect(x0, top, x1, bottom)
+                try:
+                    pix = fitz_page.get_pixmap(matrix=mat, clip=rect, alpha=False)
+                    png = pix.tobytes("png")
+                    fname = f"tableimg_p{pidx}_{tidx}.png"
+                    results.append((fname, png))
                     if len(results) >= max_tables:
+                        pdfp.close()
+                        doc.close()
                         return results
+                except Exception as e:
+                    # 個別表の描画失敗はスキップ
+                    print("render table bbox error:", e)
+
+        pdfp.close()
+        doc.close()
     except Exception as e:
-        # 表抽出失敗時は空で返す（上位で通知）
-        print("extract_tables_from_pdf_bytes error:", e)
-        return results
+        print("extract_table_images_from_pdf_bytes error:", e)
 
     return results
 
@@ -199,10 +213,7 @@ def upload_figures_as_replies(channel: str, thread_ts: str, figures: List[Tuple[
             )
         except SlackApiError as e:
             print("files_upload_v2 error:", e)
-def upload_tables_as_replies(channel: str, thread_ts: str, tables: List[Tuple[str, bytes]], limit: int = 5):
-    """
-    抽出した表CSVをスレッドにアップロード
-    """
+def upload_table_images_as_replies(channel: str, thread_ts: str, tables: List[Tuple[str, bytes]], limit: int = 6):
     for fname, data in tables[:limit]:
         try:
             api.files_upload_v2(
@@ -211,10 +222,10 @@ def upload_tables_as_replies(channel: str, thread_ts: str, tables: List[Tuple[st
                 filename=fname,
                 title=fname,
                 thread_ts=thread_ts,
-                initial_comment="検出された表（CSV、自動抽出）"
+                initial_comment="検出された表（画像、自動抽出）"
             )
         except SlackApiError as e:
-            print("files_upload_v2 (tables) error:", e)
+            print("files_upload_v2 (table images) error:", e)
 def post_error_message(channel: Optional[str], thread_ts: Optional[str], text: str):
     """エラーをSlackに人間可読で通知（スレッドがあればスレッドに返信）"""
     if not channel:
@@ -356,11 +367,11 @@ def handle_link_shared_events(body, event, logger, say):
         except Exception as e:
             logger.exception(e)
             post_error_message(ch, ts, f"図の抽出またはアップロードに失敗しました: {e}")
- 		# 4) 表抽出 → スレッドへCSVアップ
+ 		# 4) 表抽出（画像）→ スレッドへアップ
         try:
-            tables = extract_tables_from_pdf_bytes(raw_pdf, max_tables=8, min_rows=2, min_cols=2, truncate_rows=500)
-            if ch and ts and tables:
-                upload_tables_as_replies(ch, ts, tables, limit=6)
+            table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
+            if ch and ts and table_imgs:
+                upload_table_images_as_replies(ch, ts, table_imgs, limit=6)
         except Exception as e:
             logger.exception(e)
-            post_error_message(ch, ts, f"表の抽出またはアップロードに失敗しました: {e}")
+            post_error_message(ch, ts, f"表（画像）の抽出またはアップロードに失敗しました: {e}")
