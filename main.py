@@ -339,7 +339,7 @@ def handle_link_shared_events(body, event, logger, say):
         
         api.chat_postMessage(
             channel=ch,
-            text=f"リンクを受け付けました。処理中です...\n(処理が終わるまで数分かかることもあります)",
+            text=f"リンクを受け付けました。処理中です...\n(処理が終わるまで数分かかります)",
             thread_ts=ts
         )
 
