@@ -250,7 +250,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
     client = Groq(api_key=GROQ_API_KEY)
 
     # チャンク→マージ（最小実装）
-    chunk_size = 6000  # 文字ベース
+    chunk_size = 5000  # 文字ベース
     chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)] or [full_text]
 
     partials: List[str] = []
