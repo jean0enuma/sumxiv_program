@@ -380,3 +380,8 @@ def handle_link_shared_events(body, event, logger, say):
         #except Exception as e:
         #    logger.exception(e)
         #    post_error_message(ch, ts, f"表（画像）の抽出またはアップロードに失敗しました: {e}")
+        api.chat_postMessage(
+            channel=ch,
+            text=f"要約が完了しました。",
+            thread_ts=ts
+        )
