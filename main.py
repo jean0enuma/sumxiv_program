@@ -68,6 +68,29 @@ CHAT_TEMPLATE_CHUNK = r"""<instruction>
 """
 # ========= URL→PDF 解決 =========
 ARXIV_RE = re.compile(r"https?://arxiv\.org/(abs|pdf)/(?P<id>[\d\.]+)(?:\.pdf)?")
+# 追加：URL抽出ユーティリティ
+import re
+URL_RE = re.compile(r"https?://\S+")
+
+def extract_urls(text: str) -> list[str]:
+    return URL_RE.findall(text or "")
+
+def get_urls_from_thread(channel: str, thread_ts: str) -> list[str]:
+    """スレッドの親メッセージ＋返信全体からURLを回収"""
+    urls = []
+    try:
+        res = api.conversations_replies(channel=channel, ts=thread_ts, limit=100, inclusive=True)
+        for msg in res.get("messages", []):
+            urls.extend(extract_urls(msg.get("text", "")))
+    except Exception as e:
+        print("conversations_replies error:", e)
+    # 重複除去
+    dedup, seen = [], set()
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            dedup.append(u)
+    return dedup
 
 def resolve_pdf_url(url: str) -> Optional[str]:
     m = ARXIV_RE.match(url)
@@ -313,7 +336,24 @@ ALLOW_HOSTS = (
 
 def is_allowed(url: str) -> bool:
     return any(h in url for h in ALLOW_HOSTS)
-
+def get_urls_from_thread(channel: str, thread_ts: str) -> list[str]:
+    """スレッドの親メッセージ→スレッド全体からURLを回収"""
+    urls = []
+    try:
+        res = api.conversations_replies(channel=channel, ts=thread_ts, limit=50, inclusive=True)
+        for msg in res.get("messages", []):
+            urls.extend(extract_urls(msg.get("text", "")))
+    except Exception as e:
+        print("conversations_replies error:", e)
+    # 重複除去を軽く
+    seen = set()
+    dedup = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            dedup.append(u)
+    return dedup
+"""
 # ========= Slack: link_shared =========
 @app.event("link_shared")
 def handle_link_shared_events(body, event, logger, say):
@@ -385,3 +425,101 @@ def handle_link_shared_events(body, event, logger, say):
             text=f"要約が完了しました。",
             thread_ts=ts
         )
+"""
+# ========= Slack: app_mention（スレッドだけ反応） =========
+@app.event("app_mention")
+def handle_app_mention(body, event, say, logger):
+    channel = event.get("channel")
+    thread_ts = event.get("thread_ts")  # スレッド内メッセージのみ反応
+    if not channel or not thread_ts:
+        # スレッド外でメンションされても反応しない
+        return
+
+    # 1) メンション本文 → 2) スレッド全体 の順でURL探索
+    text = event.get("text", "")
+    urls = extract_urls(text)
+    if not urls:
+        urls = get_urls_from_thread(channel, thread_ts)
+
+    # 許可ドメインに限定
+    urls = [u for u in urls if is_allowed(u)]
+    if not urls:
+        try:
+            api.chat_postMessage(
+                channel=channel,
+                thread_ts=thread_ts,
+                text=":information_source: スレッドに処理対象の論文URLが見つかりません。\n"
+                     "arXiv / CVF / IEEE / ACM などのURLを貼ってから `@sumxiv` とメンションしてください。"
+            )
+        except Exception as e:
+            logger.exception(e)
+        return
+
+    # 複数ある場合は先頭のみ処理（必要ならループに拡張可）
+    url = urls[0]
+    pdf_url = resolve_pdf_url(url)
+    if not pdf_url:
+        post_error_message(channel, thread_ts, "PDFリンクを見つけられませんでした。HTMLページの場合はPDF直リンクをお願いします。")
+        return
+
+    raw_pdf = download_pdf(pdf_url)
+    if not raw_pdf:
+        post_error_message(channel, thread_ts, "PDFのダウンロードに失敗しました。サイズやアクセス制限をご確認ください。")
+        return
+
+    # 進捗メッセ
+    try:
+        api.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text="処理を開始しました。要約を作成中…"
+        )
+    except Exception as e:
+        logger.exception(e)
+
+    # 1) テキスト抽出 → 要約（Groq）
+    text = extract_text_from_pdf_bytes(raw_pdf)
+    summary, err = summarize_text_with_groq(text)
+    if err:
+        post_error_message(channel, thread_ts, err)
+        return
+
+    # 2) 要約をスレッドに投稿（アンフールは使わない運用）
+    try:
+        api.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=f"*要約（@sumxiv 指示で実行）*\n{summary}\n\n<{url}|元のリンク>"
+        )
+    except Exception as e:
+        logger.exception(e)
+        post_error_message(channel, thread_ts, f"要約の投稿に失敗しました: {e}")
+        return
+
+    # 3) 図抽出 → スレッドへアップ
+    try:
+        figs = extract_figures_from_pdf_bytes(raw_pdf, min_area=200_000)
+        if figs:
+            upload_figures_as_replies(channel, thread_ts, figs, limit=6)
+    except Exception as e:
+        logger.exception(e)
+        post_error_message(channel, thread_ts, f"図の抽出/アップロードに失敗しました: {e}")
+
+    # 4) 表（画像）抽出 → スレッドへアップ
+    try:
+        table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
+        if table_imgs:
+            upload_table_images_as_replies(channel, thread_ts, table_imgs, limit=6)
+    except Exception as e:
+        logger.exception(e)
+        post_error_message(channel, thread_ts, f"表（画像）の抽出/アップロードに失敗しました: {e}")
+
+    # 完了メッセ
+    try:
+        api.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text="完了しました ✅"
+        )
+    except Exception as e:
+        logger.exception(e)
