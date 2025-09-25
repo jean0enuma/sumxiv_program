@@ -114,40 +114,7 @@ def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[
                     pix = None
     return out
 
-# ========= Groq で要約 =========
-def summarize_text_with_groq(full_text: str) -> str:
-    if not GROQ_API_KEY:
-        return "（GROQ_API_KEY 未設定のため、ここに要約が入ります）"
-
-    from groq import Groq
-    client = Groq(api_key=GROQ_API_KEY)
-
-    # シンプルなチャンク→マージ（最小実装）
-    chunk_size = 6000  # 文字ベース簡易
-    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)] or [full_text]
-
-    partials = []
-    for ch in chunks:
-        prompt = CHAT_TEMPLATE + "\n\n本文抜粋:\n" + ch
-        resp = client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        partials.append(resp.choices[0].message.content.strip())
-
-    if len(partials) == 1:
-        return partials[0]
-
-    reduce_prompt = CHAT_TEMPLATE + "\n\n以下のチャンク要約を重複を避けて統合せよ:\n" + "\n\n".join(partials)
-    resp = client.chat.completions.create(
-        model="llama-3.1-70b-versatile",
-        messages=[{"role": "user", "content": reduce_prompt}],
-        temperature=0.2,
-    )
-    return resp.choices[0].message.content.strip()
-
-# ========= Slack 投稿 =========
+# ========= Slack 投稿ユーティリティ =========
 def post_unfurl_summary(event: dict, url: str, summary_text: str):
     blocks = [
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*要約（自動生成）*\n{summary_text}"}},
@@ -176,6 +143,79 @@ def upload_figures_as_replies(channel: str, thread_ts: str, figures: List[Tuple[
             )
         except SlackApiError as e:
             print("files_upload_v2 error:", e)
+
+def post_error_message(channel: Optional[str], thread_ts: Optional[str], text: str):
+    """エラーをSlackに人間可読で通知（スレッドがあればスレッドに返信）"""
+    if not channel:
+        return
+    try:
+        api.chat_postMessage(
+            channel=channel,
+            text=f":warning: {text}",
+            thread_ts=thread_ts
+        )
+    except SlackApiError as e:
+        print("chat_postMessage error:", e)
+
+# ========= Groq で要約（エラー通知対応） =========
+def _is_token_limit_error_message(msg: str) -> bool:
+    """Groqのトークン上限に起因しそうなメッセージを簡易判定"""
+    msg_l = msg.lower()
+    patterns = [
+        "rate limit",      
+        "RateLimitError",              
+    ]
+    return any(p in msg_l for p in patterns)
+
+def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    return (summary, error_message)
+    error_message が None でなければ呼び出し側でSlack通知する
+    """
+    if not GROQ_API_KEY:
+        return None, "GROQ_API_KEY が未設定のため要約できません。"
+
+    from groq import Groq
+    client = Groq(api_key=GROQ_API_KEY)
+
+    # チャンク→マージ（最小実装）
+    chunk_size = 6000  # 文字ベース
+    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)] or [full_text]
+
+    partials: List[str] = []
+    for ch in chunks:
+        prompt = CHAT_TEMPLATE + "\n\n本文抜粋:\n" + ch
+        try:
+            resp = client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+            )
+            partials.append(resp.choices[0].message.content.strip())
+        except Exception as e:
+            msg = str(e)
+            if _is_token_limit_error_message(msg):
+                return None, "Groqのトークン（コンテキスト長）上限に達したため、要約できませんでした。本文量を減らすかチャンクサイズを小さくしてください。"
+            # その他のAPIエラー
+            return None, f"Groq APIエラーが発生しました: {msg}"
+
+    if len(partials) == 1:
+        return partials[0], None
+
+    # reduce
+    reduce_prompt = CHAT_TEMPLATE + "\n\n以下のチャンク要約を重複を避けて統合せよ:\n" + "\n\n".join(partials)
+    try:
+        resp = client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
+            messages=[{"role": "user", "content": reduce_prompt}],
+            temperature=0.2,
+        )
+        return resp.choices[0].message.content.strip(), None
+    except Exception as e:
+        msg = str(e)
+        if _is_token_limit_error_message(msg):
+            return None, "Groqのトークン（コンテキスト長）上限に達したため、要約の統合に失敗しました。"
+        return None, f"Groq APIエラーが発生しました（reduce段階）: {msg}"
 
 # ========= 許可ドメイン =========
 ALLOW_HOSTS = (
@@ -209,22 +249,31 @@ def handle_link_shared_events(body, event, logger, say):
         if not raw_pdf:
             continue
 
-        # 1) テキスト抽出 → 要約（Groq）
+        # チャンネル/スレッド識別（エラー通知に使う）
+        ch = event.get("channel")
+        ts = event.get("message_ts") or event.get("ts")
+
+        # 1) テキスト抽出 → 要約（Groq, エラー捕捉）
         text = extract_text_from_pdf_bytes(raw_pdf)
-        summary = summarize_text_with_groq(text)
+        summary, err = summarize_text_with_groq(text)
+
+        if err:
+            post_error_message(ch, ts, err)
+            # エラー時はアンフールを行わず次へ
+            continue
 
         # 2) アンフールで要約
         try:
-            post_unfurl_summary(event, url, summary)
+            post_unfurl_summary(event, url, summary or "")
         except Exception as e:
             logger.exception(e)
+            post_error_message(ch, ts, f"アンフール中にエラーが発生しました: {e}")
 
         # 3) 図抽出 → スレッドへアップ
         try:
             figs = extract_figures_from_pdf_bytes(raw_pdf, min_area=200_000)
-            ch = event.get("channel")
-            ts = event.get("message_ts") or event.get("ts")
             if ch and ts and figs:
                 upload_figures_as_replies(ch, ts, figs, limit=6)
         except Exception as e:
             logger.exception(e)
+            post_error_message(ch, ts, f"図の抽出またはアップロードに失敗しました: {e}")
