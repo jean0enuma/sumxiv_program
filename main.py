@@ -193,6 +193,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
     partials: List[str] = []
     for ch in chunks:
         prompt = CHAT_TEMPLATE_CHUNK + "\n<chunk>\n" + ch+"\n</chunk>\n"
+        time.sleep(1)  # API制限回避
         try:
             resp = client.chat.completions.create(
                 model="groq/compound-mini",
@@ -211,6 +212,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         return partials[0], None
 
     # reduce
+    time.sleep(1)  # API制限回避
     reduce_prompt = CHAT_TEMPLATE + "\n" + "<summarize_chunks>" + "\n\n".join(partials)+"\n"+"</summarize_chunk>"+"\n"
     try:
         resp = client.chat.completions.create(
