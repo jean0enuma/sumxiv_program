@@ -166,7 +166,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
 
         try:
             resp = client.chat.completions.create(
-                model="llama-3.1-8b-swift-vision",  # Groq Visionモデル
+                model="meta-llama/llama-4-scout-17b-16e-instruct",  # Groq Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.2,
                 max_tokens=1024 # ページ要約の出力トークン数制限
@@ -189,7 +189,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
 
     try:
         resp = client.chat.completions.create(
-            model="llama-3.1-70b-swift",  # 統合には高性能なテキストモデルを使用
+            model="meta-llama/llama-4-scout-17b-16e-instruct",  # 統合には高性能なテキストモデルを使用
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
