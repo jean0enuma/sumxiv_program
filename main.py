@@ -196,7 +196,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         time.sleep(1)  # API制限回避
         try:
             resp = client.chat.completions.create(
-                model="groq/compound-mini",
+                model="moonshotai/kimi-k2-instruct-0905",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
             )
@@ -204,7 +204,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         except Exception as e:
             msg = str(e)
             if _is_token_limit_error_message(msg):
-                return None, "Groqのトークン（コンテキスト長）上限に達したため、要約できませんでした。本文量を減らすかチャンクサイズを小さくしてください。"
+                return None, "Groqのトークン（コンテキスト長）上限に達したため、要約できませんでした。管理者に本文量を減らすかチャンクサイズを小さくするよう要請してください．"
             # その他のAPIエラー
             return None, f"Groq APIエラーが発生しました: {msg}"
 
@@ -216,7 +216,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
     reduce_prompt = CHAT_TEMPLATE + "\n" + "<summarize_chunks>" + "\n\n".join(partials)+"\n"+"</summarize_chunk>"+"\n"
     try:
         resp = client.chat.completions.create(
-            model="groq/compound-mini",
+            model="moonshotai/kimi-k2-instruct-0905",
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
