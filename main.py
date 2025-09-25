@@ -259,7 +259,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         time.sleep(1)  # API制限回避
         try:
             resp = client.chat.completions.create(
-                model="groq/compound-mini",
+                model="moonshotai/kimi-k2-instruct-0905",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
             )
@@ -279,7 +279,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
     reduce_prompt = CHAT_TEMPLATE + "\n" + "<summarize_chunks>" + "\n\n".join(partials)+"\n"+"</summarize_chunk>"+"\n"
     try:
         resp = client.chat.completions.create(
-            model="groq/compound-mini",
+            model="moonshotai/kimi-k2-instruct-0905",
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
