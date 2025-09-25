@@ -222,7 +222,7 @@ def upload_table_images_as_replies(channel: str, thread_ts: str, tables: List[Tu
                 filename=fname,
                 title=fname,
                 thread_ts=thread_ts,
-                initial_comment="検出された表（画像、自動抽出）"
+                #initial_comment="検出された表（画像、自動抽出）"
             )
         except SlackApiError as e:
             print("files_upload_v2 (table images) error:", e)
@@ -360,6 +360,11 @@ def handle_link_shared_events(body, event, logger, say):
             post_error_message(ch, ts, f"アンフール中にエラーが発生しました: {e}")
 
         # 3) 図抽出 → スレッドへアップ
+        api.chat_postMessage(
+            channel=ch,
+            text=f"図の抽出を開始します...",
+            thread_ts=ts
+        )
         try:
             figs = extract_figures_from_pdf_bytes(raw_pdf, min_area=200_000)
             if ch and ts and figs:
@@ -368,10 +373,10 @@ def handle_link_shared_events(body, event, logger, say):
             logger.exception(e)
             post_error_message(ch, ts, f"図の抽出またはアップロードに失敗しました: {e}")
  		# 4) 表抽出（画像）→ スレッドへアップ
-        try:
-            table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
-            if ch and ts and table_imgs:
-                upload_table_images_as_replies(ch, ts, table_imgs, limit=6)
-        except Exception as e:
-            logger.exception(e)
-            post_error_message(ch, ts, f"表（画像）の抽出またはアップロードに失敗しました: {e}")
+        #try:
+        #    table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
+        #    if ch and ts and table_imgs:
+        #        upload_table_images_as_replies(ch, ts, table_imgs, limit=6)
+        #except Exception as e:
+        #    logger.exception(e)
+        #    post_error_message(ch, ts, f"表（画像）の抽出またはアップロードに失敗しました: {e}")
