@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from slack_bolt import App
 from slack_bolt.adapter.fastapi import SlackRequestHandler
 from slack_sdk.errors import SlackApiError
+import time
 
 # ========= 環境変数 =========
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -37,8 +38,7 @@ async def slack_events(req: Request):
 
 # ========= 要約テンプレート =========
 CHAT_TEMPLATE = r"""<instruction>
-あなたは専門の研究助手である。アップロードされた論文もしくはURL先の論文を以下のフォーマットに従って詳しくまとめよ。
-</instruction>
+あなたは専門の研究助手である。アップした要約を重複を避けて統合し、以下の7つの観点で簡潔にまとめよ．
 <format>
 1. どんなもの？
 2. 問題設定は?
@@ -54,7 +54,15 @@ CHAT_TEMPLATE = r"""<instruction>
 ・箇条書きで可読性を重視すること
 </rule>
 """
-
+CHAT_TEMPLATE_CHUNK = r"""<instruction>
+あなたは専門の研究助手である。アップした論文の一部の内容を詳しくまとめよ．
+</instruction>
+<rule>
+・必ず問題設定を記述すること
+・論文に書かれていないことは記述しない。
+・箇条書きで可読性を重視すること
+</rule>
+"""
 # ========= URL→PDF 解決 =========
 ARXIV_RE = re.compile(r"https?://arxiv\.org/(abs|pdf)/(?P<id>[\d\.]+)(?:\.pdf)?")
 
@@ -184,7 +192,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
 
     partials: List[str] = []
     for ch in chunks:
-        prompt = CHAT_TEMPLATE + "\n\n本文抜粋:\n" + ch
+        prompt = CHAT_TEMPLATE_CHUNK + "\n<chunk>\n" + ch+"\n</chunk>\n"
         try:
             resp = client.chat.completions.create(
                 model="groq/compound-mini",
@@ -203,7 +211,7 @@ def summarize_text_with_groq(full_text: str) -> Tuple[Optional[str], Optional[st
         return partials[0], None
 
     # reduce
-    reduce_prompt = CHAT_TEMPLATE + "\n\n以下のチャンク要約を重複を避けて統合せよ:\n" + "\n\n".join(partials)
+    reduce_prompt = CHAT_TEMPLATE + "\n" + "<summarize_chunks>" + "\n\n".join(partials)+"\n"+"</summarize_chunk>"+"\n"
     try:
         resp = client.chat.completions.create(
             model="groq/compound-mini",
