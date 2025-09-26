@@ -358,7 +358,7 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
         # 大きな画像を扱えるVisionモデルを選択（例: Gemini, Claude 3）
         # ご利用のモデルが大きな画像に対応しているかご確認ください
         resp = client.chat.completions.create(
-            model="google/gemini-pro-vision",  # or "anthropic/claude-3-haiku", etc.
+            model="x-ai/grok-4-fast:free", 
             messages=[{"role": "user", "content": messages_content}],
             temperature=0.1,
             #max_tokens=4096 # 要約の出力用にトークン数を確保
@@ -478,7 +478,7 @@ def handle_link_shared_events(body, event, logger, say):
             continue
         
         # 2. ページごとの画像とテキストをVision APIで要約・統合
-        title,summary, err = summarize_pages_with_openrouter_onevision(pages_data)
+        title,summary, err = summarize_pages_with_openrouter_vision(pages_data)
         if err:
             post_error_message(ch, ts, err)
             continue
