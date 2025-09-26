@@ -193,7 +193,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
         # プロンプトを追加
         messages_content.append({"type": "text", "text": CHAT_TEMPLATE_PAGE_VISION})
 
-        time.sleep(1)  # APIレート制限を避ける
+        time.sleep(10)  # APIレート制限を避ける
 
         try:
             resp = client.chat.completions.create(
@@ -220,7 +220,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
 
     try:
         resp = client.chat.completions.create(
-            model="moonshotai/kimi-k2-instruct-0905",  # 統合には高性能なテキストモデルを使用
+            model="meta-llama/llama-4-scout-17b-16e-instruct",  # 統合には高性能なテキストモデルを使用
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
