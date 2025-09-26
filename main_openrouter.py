@@ -371,8 +371,8 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
     except Exception as e:
         msg = str(e)
         if _is_token_limit_error_message(msg):
-            return None, None, f"Vision APIのトークン/画像サイズ上限のため要約に失敗しました。ページ数の少ないPDFでお試しください。: {msg}"
-        return None, None, f"Vision APIエラーが発生しました: {msg}"
+            return None, None, f"Openrouter APIのトークン/画像サイズ上限のため要約に失敗しました。ページ数の少ないPDFでお試しください。: {msg}"
+        return None, None, f"Openrouter APIエラーが発生しました: {msg}"
 # ========= 図抽出（埋め込み画像） =========
 def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[Tuple[str, bytes]]:
     out: List[Tuple[str, bytes]] = []
