@@ -104,7 +104,49 @@ CHAT_TEMPLATE_PAGE_VISION = r"""<instruction>
    - これらの関連研究と比較することで、SMKDの有効性をより詳細に分析できる。
 </example>
 """
+# 結合画像を用いた要約テンプレート
+CHAT_TEMPLATE_ONE_VISION = r"""<instruction>
+あなたは専門の研究助手である。以下に示す論文の画像と、抽出されたテキストを読み、そのページの内容を詳細かつ簡潔に要約せよ。
+</instruction>
 
+<rule>
+・画像とテキストの両方から得られる情報を統合して要約を作成すること。
+・テキストにない情報で、画像から明確に読み取れる内容は含めること。
+・論文に書かれていないことは記述しないこと。
+・箇条書きで、可読性を重視すること。
+</rule>
+<example>
+1. どんなもの？
+   - 連続手話認識のための新しい学習手法であるSelf-Mutual Knowledge Distillation (SMKD)を提案。
+   - 視覚モジュールと文脈モジュールの両方の識別能力を同時に強化することを目的とする。
+   - 視覚モジュールは空間的・短期的時間情報に、文脈モジュールは長期的時間情報に着目するよう学習。
+2.問題設定は?
+   -連続手話認識では、視覚モジュールが空間的・短期的時間情報を、文脈モジュールが長期的時間情報を捉える必要がある。
+   -しかし、従来のend-to-endの学習では、視覚モジュールが最適な特徴を学習することが難しい。
+3. 先行研究と比べてどこがすごい？
+   - 従来のend-to-endの学習では、視覚モジュールが最適な特徴を学習することが難しいという問題に対処。
+   - SMKDにより、視覚モジュールの識別力を高め、文脈モジュールが視覚情報により注目するようにしている。
+   - これにより、両モジュールの協調を維持しつつ、視覚モジュールの性能を引き出している。
+
+4. 技術や手法のキモはどこ？
+   - 視覚モジュールと文脈モジュールに同じ分類器の重みを共有させ、CTCロスで同時に学習。
+   - グロスセグメンテーションを導入し、CTCロスによるスパイク現象に対処、視覚モジュールの飽和を減らす。
+   - 学習の最終段階で重み共有を解消し、文脈モジュールの制約を緩和。
+5. どうやって有効だと検証した？
+   - PHOENIX14とPHOENIX14-Tの2つの連続手話認識データセットで実験。
+   - RGB画像のみを使用した手法の中で最先端の性能を達成（PHOENIX14: Dev 20.8%, Test 21.0%, PHOENIX14-T: Dev 20.8%, Test 22.4%）。
+   - 重み共有による視覚・文脈モジュールの協調、グロスセグメンテーションの効果を複数の実験で確認。
+
+6. 議論はある？
+   - 文脈情報も認識タスクにとって重要なので、最終的な学習段階では2つのモジュールの重み共有を解消すべきだと議論。
+   - これにより、文脈モジュールがより長期的な時間情報に特化できるようになる。
+
+7. 次に読むべき論文は？
+   - CNNとLSTMを用いた連続手話認識の研究 [15,23]
+   - 教師なし学習を用いた連続手話認識の手法 [6,35]
+   - これらの関連研究と比較することで、SMKDの有効性をより詳細に分析できる。
+</example>
+"""
 # ========= URL→PDF 解決 =========
 ARXIV_RE = re.compile(r"https?://arxiv\.org/(abs|pdf)/(?P<id>[\d\.]+)(?:\.pdf)?")
 
@@ -242,7 +284,98 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         if _is_token_limit_error_message(msg):
             return None,None, f"Openrouter APIのトークン上限のため、要約の統合に失敗しました。: {msg}"
         return None,None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
+def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    PDFの全ページ画像を1枚に結合し、Vision APIで一度に要約する。
+    戻り値: (タイトル, 最終要約, エラーメッセージ)
+    """
+    if not OPENROUTER_API_KEY:
+        return None, None, "OPENROUTER_API_KEY が未設定のため要約できません。"
 
+    if not pages_data:
+        return None, None, "要約対象のページデータがありません。"
+	#0. 先にタイトルを抽出しておく
+    first_img_bytes, first_page_text = pages_data[0]
+    try:
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=OPENROUTER_API_KEY,
+		)
+        resp = client.chat.completions.create(
+            model="x-ai/grok-4-fast:free",  # Openrouter Visionモデル
+            messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(first_img_bytes).decode('utf-8')}"}}]}],
+			temperature=0.01,
+			#max_tokens=1024 # ページ要約の出力トークン数制限
+		)
+        title= resp.choices[0].message.content.strip()
+    except Exception as e:
+        msg = str(e)
+        if _is_token_limit_error_message(msg):
+            return None, None, f"Openrouter Vision APIのトークン上限のため、タイトルの抽出に失敗しました。{msg}"
+        return None, None, f"Openrouter Vision APIエラーが発生しました (タイトル抽出): {msg}"
+    # 1. 全ページの画像をPillowを使って1枚の縦長の画像に結合
+    try:
+        images = [Image.open(io.BytesIO(img_bytes)) for img_bytes, _ in pages_data]
+        
+        # APIの画像サイズ上限を超える場合、ここでリサイズ処理を挟むことも可能
+        # 例: for i, img in enumerate(images): images[i] = img.resize(...)
+
+        max_width = max(img.width for img in images)
+        total_height = sum(img.height for img in images)
+
+        print(f"結合画像サイズ: {max_width} x {total_height}") # デバッグ用にサイズを出力
+
+        combined_image = Image.new('RGB', (max_width, total_height), (255, 255, 255))
+
+        current_y = 0
+        for img in images:
+            combined_image.paste(img, (0, current_y))
+            current_y += img.height
+
+        # 結合した画像をバイトデータに変換 (JPEGで圧縮しサイズを削減)
+        buffer = io.BytesIO()
+        combined_image.save(buffer, format="JPEG", quality=85)
+        combined_image_bytes = buffer.getvalue()
+
+    except Exception as e:
+        return None, None, f"画像の結合処理中にエラーが発生しました: {e}"
+
+    # 2. Vision APIで要約
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
+
+    try:
+        # 結合した画像をBase64エンコード
+        base64_image = base64.b64encode(combined_image_bytes).decode('utf-8')
+
+        messages_content = [
+            {"type": "text", "text": CHAT_TEMPLATE_ONE_VISION},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+            }
+        ]
+        
+        # 大きな画像を扱えるVisionモデルを選択（例: Gemini, Claude 3）
+        # ご利用のモデルが大きな画像に対応しているかご確認ください
+        resp = client.chat.completions.create(
+            model="google/gemini-pro-vision",  # or "anthropic/claude-3-haiku", etc.
+            messages=[{"role": "user", "content": messages_content}],
+            temperature=0.1,
+            max_tokens=4096 # 要約の出力用にトークン数を確保
+        )
+        
+        summary = resp.choices[0].message.content.strip()
+
+        return title, summary, None
+
+    except Exception as e:
+        msg = str(e)
+        if _is_token_limit_error_message(msg):
+            return None, None, f"Vision APIのトークン/画像サイズ上限のため要約に失敗しました。ページ数の少ないPDFでお試しください。: {msg}"
+        return None, None, f"Vision APIエラーが発生しました: {msg}"
 # ========= 図抽出（埋め込み画像） =========
 def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[Tuple[str, bytes]]:
     out: List[Tuple[str, bytes]] = []
@@ -348,7 +481,7 @@ def handle_link_shared_events(body, event, logger, say):
             continue
         
         # 2. ページごとの画像とテキストをVision APIで要約・統合
-        title,summary, err = summarize_pages_with_openrouter_vision(pages_data)
+        title,summary, err = summarize_pages_with_openrouter_onevision(pages_data)
         if err:
             post_error_message(ch, ts, err)
             continue
@@ -377,7 +510,15 @@ def handle_link_shared_events(body, event, logger, say):
             logger.exception(e)
             post_error_message(ch, ts, f"図の抽出・アップロード中にエラーが発生しました: {e}")
 
-        api.chat_postMessage(channel=ch, text="処理が完了しました。", thread_ts=ts)
-
+        # リンクを投稿したユーザーIDを取得
+        user_id = event.get("user")
+        
+        # ユーザーIDが取得できればメンションを付けて通知、できなければ通常のメッセージを投稿
+        if user_id:
+            completion_text = f"<@{user_id}> 処理が完了しました。"
+        else:
+            completion_text = "処理が完了しました。"
+            
+        api.chat_postMessage(channel=ch, text=completion_text, thread_ts=ts)
 # openrouter Vision APIの利用にはBase64エンコードが必要なため追加
 import base64
