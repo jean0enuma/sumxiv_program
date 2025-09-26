@@ -294,13 +294,14 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
 
     if not pages_data:
         return None, None, "要約対象のページデータがありません。"
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
 	#0. 先にタイトルを抽出しておく
     first_img_bytes, first_page_text = pages_data[0]
+	
     try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=OPENROUTER_API_KEY,
-		)
         resp = client.chat.completions.create(
             model="x-ai/grok-4-fast:free",  # Openrouter Visionモデル
             messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(first_img_bytes).decode('utf-8')}"}}]}],
@@ -336,16 +337,12 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
         buffer = io.BytesIO()
         combined_image.save(buffer, format="JPEG", quality=85)
         combined_image_bytes = buffer.getvalue()
+        print(f"結合画像のバイトサイズ: {len(combined_image_bytes)} bytes") # デバッグ用にバイトサイズを出力
 
     except Exception as e:
         return None, None, f"画像の結合処理中にエラーが発生しました: {e}"
 
     # 2. Vision APIで要約
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
-    )
-
     try:
         # 結合した画像をBase64エンコード
         base64_image = base64.b64encode(combined_image_bytes).decode('utf-8')
@@ -364,7 +361,7 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
             model="google/gemini-pro-vision",  # or "anthropic/claude-3-haiku", etc.
             messages=[{"role": "user", "content": messages_content}],
             temperature=0.1,
-            max_tokens=4096 # 要約の出力用にトークン数を確保
+            #max_tokens=4096 # 要約の出力用にトークン数を確保
         )
         
         summary = resp.choices[0].message.content.strip()
