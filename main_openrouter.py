@@ -345,8 +345,10 @@ def handle_link_shared_events(body, event, logger, say):
         if err:
             post_error_message(ch, ts, err)
             continue
-
-        # 3. アンフールで要約を投稿
+		#3. アンフールなしでスレッドに要約を投稿
+        api.chat_postMessage(channel=ch, text=f"*要約（自動生成）*\n{summary}", thread_ts=ts)
+        """
+		# 3. アンフールで要約を投稿
         try:
             post_unfurl_summary(event, url, summary or "要約の生成に失敗しました。")
         except Exception as e:
@@ -354,7 +356,7 @@ def handle_link_shared_events(body, event, logger, say):
             post_error_message(ch, ts, f"アンフール中にエラーが発生しました: {e}")
             # アンフール失敗時もスレッドに要約を投稿
             api.chat_postMessage(channel=ch, text=f"*要約（自動生成）*\n{summary}", thread_ts=ts)
-            
+        """
         # 4. 図と表を抽出してスレッドにアップロード（既存機能）
         try:
             figs = extract_figures_from_pdf_bytes(raw_pdf, min_area=150_000)
