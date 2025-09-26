@@ -184,13 +184,14 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
     for i, (img_bytes, page_text) in enumerate(pages_data, start=1):
         messages_content = []
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
-        if i==0:#タイトルを抽出
-            title = client.chat.completions.create(
+        if i==1:#タイトルを抽出
+            resp = client.chat.completions.create(
                 model="x-ai/grok-4-fast:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
 				#max_tokens=1024 # ページ要約の出力トークン数制限
 			)
+            title= resp.choices[0].message.content.strip()
         # 画像を追加
         messages_content.append({
             "type": "image_url",
@@ -239,7 +240,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
     except Exception as e:
         msg = str(e)
         if _is_token_limit_error_message(msg):
-            return None,None, "Openrouter APIのトークン上限のため、要約の統合に失敗しました。"
+            return None,None, f"Openrouter APIのトークン上限のため、要約の統合に失敗しました。: {msg}"
         return None,None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
 
 # ========= 図抽出（埋め込み画像） =========
