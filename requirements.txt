@@ -5,7 +5,7 @@ uvicorn==0.30.6
 requests==2.32.3
 pymupdf==1.24.9
 beautifulsoup4==4.12.3
-openai==1.47.0
+openai==1.55.3
 groq==0.31.1
 pdfplumber==0.11.7
 pillow==11.3.0

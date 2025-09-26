@@ -11,6 +11,8 @@ import pdfplumber
 import time
 from PIL import Image # 画像のリサイズ用に追加
 from openai import OpenAI
+import os
+os.kill(os.getpid(), 9)
 # ========= 環境変数 =========
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
