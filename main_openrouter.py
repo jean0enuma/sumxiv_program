@@ -478,7 +478,7 @@ def handle_link_shared_events(body, event, logger, say):
             continue
         
         # 2. ページごとの画像とテキストをVision APIで要約・統合
-        title,summary, err = summarize_pages_with_openrouter_vision(pages_data)
+        title,summary, err = summarize_pages_with_openrouter_onevision(pages_data)
         if err:
             post_error_message(ch, ts, err)
             continue
