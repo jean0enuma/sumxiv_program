@@ -201,7 +201,22 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
         return None, f"Groq APIエラーが発生しました（統合段階）: {msg}"
 
 # ========= 以下、変更なしの部分（一部ユーティリティは関数化） =========
-
+# ========= 図抽出（埋め込み画像） =========
+def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[Tuple[str, bytes]]:
+    out: List[Tuple[str, bytes]] = []
+    with fitz.open(stream=raw, filetype="pdf") as doc:
+        for pidx, page in enumerate(doc, start=1):
+            for img in page.get_images(full=True):
+                xref = img[0]
+                pix = fitz.Pixmap(doc, xref)
+                try:
+                    if pix.width * pix.height >= min_area:
+                        if pix.n >= 4 or pix.colorspace is None:
+                            pix = fitz.Pixmap(fitz.csRGB, pix)
+                        out.append((f"fig_p{pidx}_{xref}.png", pix.tobytes("png")))
+                finally:
+                    pix = None
+    return out
 # ========= Slack 投稿ユーティリティ =========
 def post_unfurl_summary(event: dict, url: str, summary_text: str):
     blocks = [
@@ -311,12 +326,12 @@ def handle_link_shared_events(body, event, logger, say):
             if ch and ts and figs:
                 upload_files_as_replies(ch, ts, figs, initial_comment="検出された図（自動抽出）", limit=6)
             
-            table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
-            if ch and ts and table_imgs:
-                upload_files_as_replies(ch, ts, table_imgs, initial_comment="検出された表（画像として抽出）", limit=6)
+            #table_imgs = extract_table_images_from_pdf_bytes(raw_pdf, dpi=220, max_tables=8, min_bbox_area=20_000.0)
+            #if ch and ts and table_imgs:
+            #    upload_files_as_replies(ch, ts, table_imgs, initial_comment="検出された表（画像として抽出）", limit=6)
         except Exception as e:
             logger.exception(e)
-            post_error_message(ch, ts, f"図または表の抽出・アップロード中にエラーが発生しました: {e}")
+            post_error_message(ch, ts, f"図の抽出・アップロード中にエラーが発生しました: {e}")
 
         api.chat_postMessage(channel=ch, text="処理が完了しました。", thread_ts=ts)
 
