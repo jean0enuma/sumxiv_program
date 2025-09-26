@@ -157,7 +157,7 @@ def extract_pages_data_from_pdf_bytes(raw: bytes, dpi: int = 200) -> List[Tuple[
         return []
     return pages_data
 
-# ========= Groq で要約（Vision対応） =========
+# ========= openrouter で要約（Vision対応） =========
 def _is_token_limit_error_message(msg: str) -> bool:
     msg_l = msg.lower()
     patterns = ["rate limit", "ratelimiterror", "context_length_exceeded", "too many tokens"]
@@ -199,7 +199,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="x-ai/grok-4-fast:free",  # Groq Visionモデル
+                model="x-ai/grok-4-fast:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.2,
                 #max_tokens=1024 # ページ要約の出力トークン数制限
@@ -209,8 +209,8 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         except Exception as e:
             msg = str(e)
             if _is_token_limit_error_message(msg):
-                return None, f"Groq Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
-            return None, f"Groq Vision APIエラーが発生しました ({i}ページ目): {msg}"
+                return None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
+            return None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
 
     if not page_summaries:
         return None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
@@ -230,8 +230,8 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
     except Exception as e:
         msg = str(e)
         if _is_token_limit_error_message(msg):
-            return None, "Groq APIのトークン上限のため、要約の統合に失敗しました。"
-        return None, f"Groq APIエラーが発生しました（統合段階）: {msg}"
+            return None, "Openrouter APIのトークン上限のため、要約の統合に失敗しました。"
+        return None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
 
 # ========= 以下、変更なしの部分（一部ユーティリティは関数化） =========
 # ========= 図抽出（埋め込み画像） =========
@@ -339,7 +339,7 @@ def handle_link_shared_events(body, event, logger, say):
             continue
         
         # 2. ページごとの画像とテキストをVision APIで要約・統合
-        summary, err = summarize_pages_with_groq_vision(pages_data)
+        summary, err = summarize_pages_with_openrouter_vision(pages_data)
         if err:
             post_error_message(ch, ts, err)
             continue
@@ -368,5 +368,5 @@ def handle_link_shared_events(body, event, logger, say):
 
         api.chat_postMessage(channel=ch, text="処理が完了しました。", thread_ts=ts)
 
-# Groq Vision APIの利用にはBase64エンコードが必要なため追加
+# openrouter Vision APIの利用にはBase64エンコードが必要なため追加
 import base64
