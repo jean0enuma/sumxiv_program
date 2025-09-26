@@ -220,7 +220,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
 
     try:
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # 統合には高性能なテキストモデルを使用
+            model="moonshotai/kimi-k2-instruct-0905",  # 統合には高性能なテキストモデルを使用
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
