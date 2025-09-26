@@ -164,6 +164,7 @@ def _is_token_limit_error_message(msg: str) -> bool:
     msg_l = msg.lower()
     patterns = ["rate limit", "ratelimiterror", "context_length_exceeded", "too many tokens"]
     return any(p in msg_l for p in patterns)
+    
 
 def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) -> Tuple[Optional[str], Optional[str]]:
     """
@@ -183,7 +184,13 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
     for i, (img_bytes, page_text) in enumerate(pages_data, start=1):
         messages_content = []
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
-        
+        if i==0:#タイトルを抽出
+            title = client.chat.completions.create(
+                model="x-ai/grok-4-fast:free",  # Openrouter Visionモデル
+				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
+				temperature=0.01,
+				#max_tokens=1024 # ページ要約の出力トークン数制限
+			)
         # 画像を追加
         messages_content.append({
             "type": "image_url",
@@ -211,11 +218,11 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         except Exception as e:
             msg = str(e)
             if _is_token_limit_error_message(msg):
-                return None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
-            return None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
+                return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
+            return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
 
     if not page_summaries:
-        return None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
+        return None,None,None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
 
     # 2. 全ページの要約を統合
     #time.sleep(1)  # APIレート制限を避ける
@@ -228,14 +235,13 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.2,
         )
-        return resp.choices[0].message.content.strip(), None
+        return title,resp.choices[0].message.content.strip(), None
     except Exception as e:
         msg = str(e)
         if _is_token_limit_error_message(msg):
-            return None, "Openrouter APIのトークン上限のため、要約の統合に失敗しました。"
-        return None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
+            return None,None, "Openrouter APIのトークン上限のため、要約の統合に失敗しました。"
+        return None,None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
 
-# ========= 以下、変更なしの部分（一部ユーティリティは関数化） =========
 # ========= 図抽出（埋め込み画像） =========
 def extract_figures_from_pdf_bytes(raw: bytes, min_area: int = 200_000) -> List[Tuple[str, bytes]]:
     out: List[Tuple[str, bytes]] = []
@@ -341,12 +347,12 @@ def handle_link_shared_events(body, event, logger, say):
             continue
         
         # 2. ページごとの画像とテキストをVision APIで要約・統合
-        summary, err = summarize_pages_with_openrouter_vision(pages_data)
+        title,summary, err = summarize_pages_with_openrouter_vision(pages_data)
         if err:
             post_error_message(ch, ts, err)
             continue
 		#3. アンフールなしでスレッドに要約を投稿
-        api.chat_postMessage(channel=ch, text=f"*要約（自動生成）*\n{summary}", thread_ts=ts)
+        api.chat_postMessage(channel=ch, text=f"*{title}*\n*論文要約*\n{summary}", thread_ts=ts)
         """
 		# 3. アンフールで要約を投稿
         try:
