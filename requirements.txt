@@ -9,3 +9,4 @@ openai==1.47.0
 groq==0.31.1
 pdfplumber==0.11.7
 pillow==11.3.0
+httpx==0.27.2
