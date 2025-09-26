@@ -195,7 +195,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         # プロンプトを追加
         messages_content.append({"type": "text", "text": CHAT_TEMPLATE_PAGE_VISION})
 
-        time.sleep(2)  # APIレート制限を避ける
+        #time.sleep(2)  # APIレート制限を避ける
 
         try:
             resp = client.chat.completions.create(
@@ -216,7 +216,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         return None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
 
     # 2. 全ページの要約を統合
-    time.sleep(1)  # APIレート制限を避ける
+    #time.sleep(1)  # APIレート制限を避ける
     combined_summaries = "\n\n".join(page_summaries)
     reduce_prompt = f"{CHAT_TEMPLATE}\n<page_summaries>\n{combined_summaries}\n</page_summaries>"
 
