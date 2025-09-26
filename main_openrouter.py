@@ -512,9 +512,9 @@ def handle_link_shared_events(body, event, logger, say):
         
         # ユーザーIDが取得できればメンションを付けて通知、できなければ通常のメッセージを投稿
         if user_id:
-            completion_text = f"<@{user_id}> 処理が完了しました。"
+            completion_text = f"<@{user_id}> 要約が完了しました。"
         else:
-            completion_text = "処理が完了しました。"
+            completion_text = "要約が完了しました。"
             
         api.chat_postMessage(channel=ch, text=completion_text, thread_ts=ts)
 # openrouter Vision APIの利用にはBase64エンコードが必要なため追加
