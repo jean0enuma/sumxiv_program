@@ -461,7 +461,7 @@ def handle_link_shared_events(body, event, logger, say):
         
         api.chat_postMessage(
             channel=ch,
-            text=f"論文リンクを受け付けました。要約を開始します... (時間がかかります)",
+            text=f"論文リンクを受け付けました。要約を開始します... (ページ数が多いほど時間がかかります)",
             thread_ts=ts
         )
 
