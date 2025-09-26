@@ -193,7 +193,7 @@ def summarize_pages_with_groq_vision(pages_data: List[Tuple[bytes, str]]) -> Tup
         # プロンプトを追加
         messages_content.append({"type": "text", "text": CHAT_TEMPLATE_PAGE_VISION})
 
-        time.sleep(10)  # APIレート制限を避ける
+        time.sleep(2)  # APIレート制限を避ける
 
         try:
             resp = client.chat.completions.create(
