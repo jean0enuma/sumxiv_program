@@ -505,7 +505,7 @@ def handle_link_shared_events(body, event, logger, say):
             logger.exception(e)
             post_error_message(ch, ts, f"図の抽出・アップロード中にエラーが発生しました: {e}")
 
-        time.sleep(1)  # 少し待ってから完了メッセージを投稿
+        time.sleep(5)  # 少し待ってから完了メッセージを投稿
 		# リンクを投稿したユーザーIDを取得
         user_id = event.get("user")
         
