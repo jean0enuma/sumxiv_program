@@ -272,7 +272,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
     try:
         resp = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free",  # 統合には高性能なテキストモデルを使用
+            model="deepseek/deepseek-chat-v3.1:free",  # 統合には高性能なテキストモデルを使用
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.1,
         )
