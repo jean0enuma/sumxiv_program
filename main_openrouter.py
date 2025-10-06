@@ -226,7 +226,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
         if i==1:#タイトルを抽出
             resp = client.chat.completions.create(
-                model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
+                model="google/gemini-2.0-flash-exp:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
 				#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -249,7 +249,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
+                model="google/gemini-2.0-flash-exp:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.2,
                 #max_tokens=1024 # ページ要約の出力トークン数制限
