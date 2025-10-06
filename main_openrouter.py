@@ -226,7 +226,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
         if i==1:#タイトルを抽出
             resp = client.chat.completions.create(
-                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
+                model="mgoogle/gemma-3-27b-it:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
 				#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -249,7 +249,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
+                model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.01,
                 #max_tokens=1024 # ページ要約の出力トークン数制限
@@ -257,19 +257,29 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
             summary = resp.choices[0].message.content.strip()
             page_summaries.append(f"## Page {i} Summary:\n{summary}")
         except Exception as e:
-            msg = str(e)
-            if _is_token_limit_error_message(msg):
-                return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
-            return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
+            try:
+                resp = client.chat.completions.create(
+					model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
+					messages=[{"role": "user", "content": messages_content}],
+					temperature=0.01,
+					#max_tokens=1024 # ページ要約の出力トークン数制限
+				)
+                summary = resp.choices[0].message.content.strip()
+                page_summaries.append(f"## Page {i} Summary:\n{summary}")
+            except Exception as e:
+                msg = str(e)
+                if _is_token_limit_error_message(msg):
+                    return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
+                return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
 
     if not page_summaries:
         return None,None,None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
-
+    time.sleep(3)
     # 2. 全ページの要約を統合
     #time.sleep(1)  # APIレート制限を避ける
     combined_summaries = "\n\n".join(page_summaries)
     reduce_prompt = f"{CHAT_TEMPLATE}\n<page_summaries>\n{combined_summaries}\n</page_summaries>"
-
+	
     try:
         resp = client.chat.completions.create(
             model="deepseek/deepseek-chat-v3.1:free",  # 統合には高性能なテキストモデルを使用
