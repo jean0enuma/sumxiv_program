@@ -226,7 +226,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
         if i==1:#タイトルを抽出
             resp = client.chat.completions.create(
-                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
 				#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -249,7 +249,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.01,
                 #max_tokens=1024 # ページ要約の出力トークン数制限
@@ -301,7 +301,7 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
 	
     try:
         resp = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+            model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
             messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(first_img_bytes).decode('utf-8')}"}}]}],
 			temperature=0.01,
 			#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -356,7 +356,7 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
         # 大きな画像を扱えるVisionモデルを選択（例: Gemini, Claude 3）
         # ご利用のモデルが大きな画像に対応しているかご確認ください
         resp = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free", 
+            model="mistralai/mistral-small-3.2-24b-instruct:free", 
             messages=[{"role": "user", "content": messages_content}],
             temperature=0.1,
             #max_tokens=4096 # 要約の出力用にトークン数を確保
