@@ -226,10 +226,9 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
         if i==1:#タイトルを抽出
             resp = client.chat.completions.create(
-                model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
+                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
-                provider="chutes/bf16"
 				#max_tokens=1024 # ページ要約の出力トークン数制限
 			)
             title= resp.choices[0].message.content.strip()
@@ -250,10 +249,9 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
+                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.01,
-                provider="chutes/bf16"
                 #max_tokens=1024 # ページ要約の出力トークン数制限
             )
             summary = resp.choices[0].message.content.strip()
@@ -274,10 +272,9 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
     try:
         resp = client.chat.completions.create(
-            model="google/gemma-3-27b-it:free",  # 統合には高性能なテキストモデルを使用
+            model="meta-llama/llama-4-maverick:free",  # 統合には高性能なテキストモデルを使用
             messages=[{"role": "user", "content": reduce_prompt}],
             temperature=0.1,
-            provider="chutes/bf16"
         )
         return title,resp.choices[0].message.content.strip(), None
     except Exception as e:
@@ -304,10 +301,9 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
 	
     try:
         resp = client.chat.completions.create(
-            model="google/gemma-3-27b-it:free",  # Openrouter Visionモデル
+            model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
             messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(first_img_bytes).decode('utf-8')}"}}]}],
 			temperature=0.01,
-            provider="chutes/bf16"
 			#max_tokens=1024 # ページ要約の出力トークン数制限
 		)
         title= resp.choices[0].message.content.strip()
@@ -360,10 +356,9 @@ def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]
         # 大きな画像を扱えるVisionモデルを選択（例: Gemini, Claude 3）
         # ご利用のモデルが大きな画像に対応しているかご確認ください
         resp = client.chat.completions.create(
-            model="google/gemma-3-27b-it:free", 
+            model="meta-llama/llama-4-maverick:free", 
             messages=[{"role": "user", "content": messages_content}],
             temperature=0.1,
-            provider="chutes/bf16"
             #max_tokens=4096 # 要約の出力用にトークン数を確保
         )
         
