@@ -11,12 +11,15 @@ import pdfplumber
 import time
 from PIL import Image # 画像のリサイズ用に追加
 from openai import OpenAI
+from groq import Groq
+
 #import os
 #os.kill(os.getpid(), 9)
 # ========= 環境変数 =========
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # ========= Slack Bolt =========
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
@@ -226,7 +229,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         messages_content.append({"type": "text", "text": f"論文の{i}/{len(pages_data)}ページ目です。"})
         if i==1:#タイトルを抽出
             resp = client.chat.completions.create(
-                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
 				messages=[{"role": "user", "content": [{"type": "text", "text": "この論文のタイトルを教えてください。"},{"type": "image_url","image_url": {"url": f"data:image/png;base64,{base64.b64encode(img_bytes).decode('utf-8')}"}}]}],
 				temperature=0.01,
 				#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -286,11 +289,31 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 					#	max_tokens=1024 # ページ要約の出力トークン数制限
 				    )
                     except Exception as e:
-                        msg = str(e)
-                        if _is_token_limit_error_message(msg):
-                            return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
-                        return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
+                        client_groq=Groq(
+							api_key=GROQ_API_KEY,
+						)
+                        try:
+                            resp = client_groq.chat.completions.create(
+							model="meta-llama/llama-4-maverick-17b-128e-instruct",  # Groq Visionモデル
+							messages=[{"role": "user", "content": messages_content}],
+							temperature=0.01,
+							#max_tokens=1024 # ページ要約の出力トークン数制限
+							)
+                        except Exception as e:
+                            try:
+                                resp = client_groq.chat.completions.create(
+                                model="meta-llama/llama-4-scout-17b-16e-instruct",  # Groq Visionモデル
+                                messages=[{"role": "user", "content": messages_content}],
+                                temperature=0.01,
+                                #max_tokens=1024 # ページ要約の出力トークン数制限
+                                )
+                            except Exception as e:
+                                msg = str(e)
+                                if _is_token_limit_error_message(msg):
+                                    return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
+                                return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
 
+        
         if not page_summaries:
             return None,None,None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
     time.sleep(3)
