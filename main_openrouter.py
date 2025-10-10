@@ -249,7 +249,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 
         try:
             resp = client.chat.completions.create(
-                model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+                model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
                 messages=[{"role": "user", "content": messages_content}],
                 temperature=0.01,
                 #max_tokens=1024 # ページ要約の出力トークン数制限
@@ -259,7 +259,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         except Exception as e:
             try:
                 resp = client.chat.completions.create(
-					model="mistralai/mistral-small-3.2-24b-instruct:free",  # Openrouter Visionモデル
+					model="qwen/qwen2.5-vl-72b-instruct:free",  # Openrouter Visionモデル
 					messages=[{"role": "user", "content": messages_content}],
 					temperature=0.01,
 					#max_tokens=1024 # ページ要約の出力トークン数制限
@@ -267,13 +267,29 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
                 summary = resp.choices[0].message.content.strip()
                 page_summaries.append(f"## Page {i} Summary:\n{summary}")
             except Exception as e:
-                msg = str(e)
-                if _is_token_limit_error_message(msg):
-                    return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
-                return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
+                try:
+                    resp = client.chat.completions.create(
+					model="mistralai/mistral-small-3.1-24b-instruct:free",  # Openrouter Visionモデル
+					messages=[{"role": "user", "content": messages_content}],
+					temperature=0.01,
+					#max_tokens=1024 # ページ要約の出力トークン数制限
+				)
+                except Exception as e:
+                    try:
+                        resp = client.chat.completions.create(
+						model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
+						messages=[{"role": "user", "content": messages_content}],
+						temperature=0.01,
+					#	max_tokens=1024 # ページ要約の出力トークン数制限
+				    )
+                    except Exception as e:
+                        msg = str(e)
+                        if _is_token_limit_error_message(msg):
+                            return None, None, f"Openrouter Vision APIのトークン上限のため、{i}ページ目の要約に失敗しました。{msg}"
+                        return None, None, f"Openrouter Vision APIエラーが発生しました ({i}ページ目): {msg}"
 
-    if not page_summaries:
-        return None,None,None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
+        if not page_summaries:
+            return None,None,None, "PDFから画像またはテキストが抽出できなかったか、全てのページが処理できませんでした。"
     time.sleep(3)
     # 2. 全ページの要約を統合
     #time.sleep(1)  # APIレート制限を避ける
