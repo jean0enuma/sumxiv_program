@@ -245,7 +245,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         # プロンプトを追加
         messages_content.append({"type": "text", "text": CHAT_TEMPLATE_PAGE_VISION})
 
-        #time.sleep(2)  # APIレート制限を避ける
+        time.sleep(3)  # APIレート制限を避ける
 
         try:
             resp = client.chat.completions.create(
@@ -257,6 +257,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
             summary = resp.choices[0].message.content.strip()
             page_summaries.append(f"## Page {i} Summary:\n{summary}")
         except Exception as e:
+            time.sleep(1)  # APIレート制限を避ける
             try:
                 resp = client.chat.completions.create(
 					model="qwen/qwen2.5-vl-72b-instruct:free",  # Openrouter Visionモデル
@@ -267,6 +268,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
                 summary = resp.choices[0].message.content.strip()
                 page_summaries.append(f"## Page {i} Summary:\n{summary}")
             except Exception as e:
+                time.sleep(1)  # APIレート制限を避ける
                 try:
                     resp = client.chat.completions.create(
 					model="mistralai/mistral-small-3.1-24b-instruct:free",  # Openrouter Visionモデル
@@ -275,6 +277,7 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
 					#max_tokens=1024 # ページ要約の出力トークン数制限
 				)
                 except Exception as e:
+                    time.sleep(1)  # APIレート制限を避ける
                     try:
                         resp = client.chat.completions.create(
 						model="meta-llama/llama-4-maverick:free",  # Openrouter Visionモデル
