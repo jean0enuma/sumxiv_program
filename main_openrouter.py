@@ -330,10 +330,30 @@ def summarize_pages_with_openrouter_vision(pages_data: List[Tuple[bytes, str]]) 
         )
         return title,resp.choices[0].message.content.strip(), None
     except Exception as e:
-        msg = str(e)
-        if _is_token_limit_error_message(msg):
-            return None,None, f"Openrouter APIのトークン上限のため、要約の統合に失敗しました。: {msg}"
-        return None,None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
+        time.sleep(3)
+        try:
+            resp = client.chat.completions.create(
+                model="deepseek/deepseek-r1-0528:free",  # 統合には高性能なテキストモデルを使用
+                messages=[{"role": "user", "content": reduce_prompt}],
+                temperature=0.1,
+            )
+            return title,resp.choices[0].message.content.strip(), None
+        except Exception as e:
+            try:
+                client_groq=Groq(
+					api_key=GROQ_API_KEY,
+				)
+                resp = client_groq.chat.completions.create(
+                    model="openai/gpt-oss-120b",
+                    messages=[{"role": "user", "content": reduce_prompt}],
+                    temperature=0.1,
+				)
+                return title,resp.choices[0].message.content.strip(), None
+            except Exception as e:
+                msg = str(e)
+                if _is_token_limit_error_message(msg):
+                    return None,None, f"Openrouter APIのトークン上限のため、要約の統合に失敗しました。: {msg}"
+                return None,None, f"Openrouter APIエラーが発生しました（統合段階）: {msg}"
 def summarize_pages_with_openrouter_onevision(pages_data: List[Tuple[bytes, str]]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     PDFの全ページ画像を1枚に結合し、Vision APIで一度に要約する。
